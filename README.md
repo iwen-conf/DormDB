@@ -121,8 +121,8 @@ Content-Type: application/json
   "code": 0,
   "message": "Success",
   "data": {
-    "db_host": "sql.iluwen.cn",
-    "db_port": 49500,
+    "db_host": "localhost",
+    "db_port": 3306,
     "db_name": "db_20250701",
     "username": "user_20250701",
     "password": "GeneratedSecurePassword123"
