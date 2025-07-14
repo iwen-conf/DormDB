@@ -57,7 +57,7 @@ DormDB 是一个基于 Rust 开发的数据库自助申请平台，为用户提�
 
 1. **克隆项目**
 ```bash
-git clone <repository-url>
+git clone git@github.com:iwen-conf/DormDB.git
 cd DormDB
 ```
 
@@ -276,14 +276,5 @@ cargo test --bin
 - **[.env.example](.env.example)** - 环境变量配置模板
 - **[LICENSE](LICENSE)** - MIT 开源许可证
 
-## 📞 支持
-
-如有问题或建议，请：
-- 提交 [Issue](../../issues)
-- 查看 [在线 API 文档](http://localhost:3000/swagger-ui/)
-- 阅读上述相关文档
-- 联系开发团队
-
----
 
 **DormDB Team** - 让数据库申请变得简单安全 🚀
