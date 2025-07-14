@@ -1,6 +1,5 @@
 # DormDB - 数据库自助申请平台
 
-![DormDB.png](https://raw.gitcode.com/user-images/assets/6746717/7742866e-26ec-4fa4-a13e-40c231c91085/DormDB.png 'DormDB.png')
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
