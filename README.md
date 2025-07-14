@@ -1,6 +1,8 @@
 # DormDB - 数据库自助申请平台
 
 
+<img width="2623" height="1312" alt="DormDB" src="https://github.com/user-attachments/assets/82402620-ce77-4e39-8a6d-75f1f8343731" />
+
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![API Docs](https://img.shields.io/badge/API-Swagger-green.svg)](http://localhost:3000/swagger-ui/)
