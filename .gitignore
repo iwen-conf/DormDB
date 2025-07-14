@@ -1,0 +1,50 @@
+# Rust 编译输出
+/target/
+**/*.rs.bk
+
+# 环境配置文件 (包含敏感信息)
+.env
+.env.local
+.env.production
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+dormdb_state.db*
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE 和编辑器文件
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# 备份文件
+*.bak
+*.backup
+*.orig
+
+# 测试输出
+test_output/
+coverage/
+
+# 运行时文件
+*.pid
+*.sock
+
+# 缓存目录
+.cache/
+tmp/
+temp/
