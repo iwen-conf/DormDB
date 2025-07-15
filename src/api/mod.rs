@@ -7,7 +7,6 @@ use crate::models::{
 use crate::services::DatabaseService;
 use actix_web::{HttpResponse, Result, web};
 use log::{info, warn};
-use serde_json::json;
 use utoipa::OpenApi;
 
 /// 申请数据库
@@ -650,8 +649,7 @@ pub async fn api_get_student_id_stats(
         license(
             name = "MIT License",
             url = "https://opensource.org/licenses/MIT"
-        ),
-        terms_of_service = "https://github.com/iwen-conf/DormDB/blob/main/LICENSE"
+        )
     ),
     servers(
         (url = "http://localhost:3000", description = "开发环境"),
@@ -705,14 +703,6 @@ pub async fn api_get_student_id_stats(
             ApiResponse<SystemStatus>,
             ApiResponse<ApplicationStats>,
             ApiResponse<Vec<PublicApplicationRecord>>
-        ),
-        security_schemes(
-            ("Bearer" = (
-                type = "http",
-                scheme = "bearer",
-                bearer_format = "JWT",
-                description = "JWT令牌认证\n\n获取方式：调用 `/api/v1/admin/login` 接口获取JWT令牌\n\n使用方法：在请求头中添加 `Authorization: Bearer YOUR_JWT_TOKEN`\n\n令牌有效期：24小时"
-            ))
         )
     ),
     tags(
