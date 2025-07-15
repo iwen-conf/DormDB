@@ -371,16 +371,49 @@ impl DatabaseService {
     pub async fn admin_login(&self, password: &str) -> ApiResponse<String> {
         info!("管理员登录验证");
 
-        // 这里应该从配置中获取管理员密码，但由于架构限制，我们使用环境变量
-        let admin_password =
-            std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin123".to_string());
+        // 验证密码强度
+        if let Err(e) = crate::auth::PasswordUtils::validate_password_strength(password) {
+            warn!("管理员登录失败：密码强度不足 - {}", e);
+            return ApiResponse::error(40102, "密码强度不足".to_string());
+        }
 
-        if password == admin_password {
-            info!("管理员登录成功");
-            ApiResponse::success("登录成功".to_string())
-        } else {
-            warn!("管理员登录失败：密码错误");
-            ApiResponse::error(40101, "密码错误".to_string())
+        // 从配置中获取管理员密码哈希
+        let admin_password_hash = std::env::var("ADMIN_PASSWORD_HASH")
+            .unwrap_or_else(|_| {
+                // 如果没有设置哈希，尝试获取明文密码（不推荐）
+                let plain_password = std::env::var("ADMIN_PASSWORD")
+                    .unwrap_or_else(|_| "admin123".to_string());
+                
+                // 动态生成哈希（仅用于向后兼容）
+                crate::auth::PasswordUtils::hash_password(&plain_password)
+                    .unwrap_or_else(|_| "$2b$12$invalid_hash".to_string())
+            });
+
+        // 验证密码
+        match crate::auth::PasswordUtils::verify_password(password, &admin_password_hash) {
+            Ok(true) => {
+                info!("管理员登录成功");
+                
+                // 生成JWT令牌
+                let auth_service = crate::auth::AuthService::new();
+                match auth_service.generate_token("admin", "admin") {
+                    Ok(token) => {
+                        ApiResponse::success(format!("{{\"token\": \"{}\", \"message\": \"登录成功\"}}", token))
+                    }
+                    Err(e) => {
+                        error!("生成令牌失败: {}", e);
+                        ApiResponse::error(50003, "令牌生成失败".to_string())
+                    }
+                }
+            }
+            Ok(false) => {
+                warn!("管理员登录失败：密码错误");
+                ApiResponse::error(40101, "密码错误".to_string())
+            }
+            Err(e) => {
+                error!("密码验证过程中出错: {}", e);
+                ApiResponse::error(50004, "认证服务异常".to_string())
+            }
         }
     }
 

@@ -3,10 +3,12 @@ use actix_files as fs;
 use actix_web::{App, HttpServer, middleware::Logger, web};
 use dotenv::dotenv;
 use log::info;
+use std::env;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 mod api;
+mod auth;
 mod config;
 mod database;
 mod models;
@@ -56,11 +58,44 @@ async fn main() -> std::io::Result<()> {
 
     // Start HTTP server
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
-            .max_age(3600);
+        // 更安全的CORS配置
+        let cors = if cfg!(debug_assertions) {
+            // 开发环境：允许本地开发服务器
+            Cors::default()
+                .allowed_origin("http://localhost:3000")
+                .allowed_origin("http://127.0.0.1:3000")
+                .allowed_origin("http://localhost:8080")
+                .allowed_origin("http://127.0.0.1:8080")
+                .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+                .allowed_headers(vec![
+                    actix_web::http::header::AUTHORIZATION,
+                    actix_web::http::header::ACCEPT,
+                    actix_web::http::header::CONTENT_TYPE,
+                ])
+                .supports_credentials()
+                .max_age(3600)
+        } else {
+            // 生产环境：仅允许特定域名
+            let allowed_origins = env::var("ALLOWED_ORIGINS")
+                .unwrap_or_else(|_| "https://your-domain.com".to_string());
+            
+            let mut cors = Cors::default()
+                .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+                .allowed_headers(vec![
+                    actix_web::http::header::AUTHORIZATION,
+                    actix_web::http::header::ACCEPT,
+                    actix_web::http::header::CONTENT_TYPE,
+                ])
+                .supports_credentials()
+                .max_age(3600);
+            
+            // 添加允许的源
+            for origin in allowed_origins.split(',') {
+                cors = cors.allowed_origin(origin.trim());
+            }
+            
+            cors
+        };
 
         App::new()
             .app_data(web::Data::new(database_service.clone()))

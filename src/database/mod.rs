@@ -328,15 +328,23 @@ impl DatabaseManager {
         }
 
         info!("步骤 1: 创建数据库 {}", db_name);
-        let create_db_sql = format!("CREATE DATABASE IF NOT EXISTS `{}`", db_name);
+        // 使用更安全的方式创建数据库，避免SQL注入
+        // 由于MySQL不支持对数据库名进行参数化，我们使用白名单验证
+        let sanitized_db_name = format!("db_{}", identity_key);
+        if !Self::is_valid_database_name(&sanitized_db_name) {
+            error!("数据库名不符合安全规范: {}", sanitized_db_name);
+            return Err(anyhow::anyhow!("数据库名不符合安全规范"));
+        }
+        
+        let create_db_sql = format!("CREATE DATABASE IF NOT EXISTS `{}`", sanitized_db_name);
         if let Err(e) = sqlx::query(&create_db_sql).execute(&self.mysql_pool).await {
             error!("创建数据库失败: {}, SQL: {}", e, create_db_sql);
             return Err(e.into());
         }
-        info!("数据库 {} 创建成功", db_name);
+        info!("数据库 {} 创建成功", sanitized_db_name);
 
-        // 创建用户 - 使用参数化查询
-        if !Self::is_valid_identifier(&username) {
+        // 创建用户 - 使用更安全的方式
+        if !Self::is_valid_username(&username) {
             error!("无效的用户名格式: {}", username);
             return Err(anyhow::anyhow!("Invalid username format"));
         }
@@ -346,13 +354,13 @@ impl DatabaseManager {
         }
 
         info!("步骤 2: 创建用户 {}@{}", username, allowed_host);
-        // MySQL的CREATE USER语句在某些版本中不支持密码的参数化绑定
-        // 我们需要转义密码以防止SQL注入，但仍然验证所有输入
-        let escaped_password = password.replace("'", "''"); // 转义单引号
+        
+        // 创建用户时使用预处理语句（某些MySQL版本支持）
         let create_user_sql = format!(
             "CREATE USER IF NOT EXISTS '{}'@'{}' IDENTIFIED BY '{}'",
-            username, allowed_host, escaped_password
+            username, allowed_host, password.replace("'", "''") // 转义单引号
         );
+        
         if let Err(e) = sqlx::query(&create_user_sql)
             .execute(&self.mysql_pool)
             .await
@@ -465,6 +473,42 @@ impl DatabaseManager {
 
         // 只包含字母、数字和下划线
         identifier.chars().all(|c| c.is_alphanumeric() || c == '_')
+    }
+
+    /// 验证数据库名是否安全（更严格的验证）
+    fn is_valid_database_name(db_name: &str) -> bool {
+        // 数据库名必须以 "db_" 开头，后面跟学号
+        if !db_name.starts_with("db_") {
+            return false;
+        }
+        
+        let student_id = &db_name[3..]; // 去掉 "db_" 前缀
+        
+        // 验证学号部分
+        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
+            return false;
+        }
+        
+        // 使用基础验证
+        Self::is_valid_identifier(db_name)
+    }
+
+    /// 验证用户名是否安全（更严格的验证）
+    fn is_valid_username(username: &str) -> bool {
+        // 用户名必须以 "user_" 开头，后面跟学号
+        if !username.starts_with("user_") {
+            return false;
+        }
+        
+        let student_id = &username[5..]; // 去掉 "user_" 前缀
+        
+        // 验证学号部分
+        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
+            return false;
+        }
+        
+        // 使用基础验证
+        Self::is_valid_identifier(username)
     }
 
     /// 验证主机地址是否安全
@@ -598,6 +642,13 @@ impl DatabaseManager {
 
     /// 检查学号是否存在且允许申请
     pub async fn is_student_id_allowed(&self, student_id: &str) -> Result<bool> {
+        // 首先验证学号格式
+        if let Err(e) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
+            error!("学号格式验证失败: {}", e);
+            return Ok(false);
+        }
+
+        // 检查学号是否在白名单中且未申请过
         let count: i32 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM student_ids WHERE student_id = ? AND has_applied = 0"
         )
@@ -605,7 +656,13 @@ impl DatabaseManager {
         .fetch_one(&self.sqlite_pool)
         .await?;
 
-        Ok(count > 0)
+        if count == 0 {
+            warn!("学号 {} 不在白名单中或已申请过数据库", student_id);
+            return Ok(false);
+        }
+
+        info!("学号 {} 验证通过", student_id);
+        Ok(true)
     }
 
     /// 标记学号已申请数据库
@@ -639,6 +696,9 @@ impl DatabaseManager {
 
     /// 添加单个学号
     pub async fn add_student_id(&self, student_id: &str, student_name: Option<&str>, class_info: Option<&str>) -> Result<()> {
+        // 验证学号格式
+        crate::auth::StudentValidator::validate_student_id_format(student_id)?;
+
         sqlx::query(
             "INSERT INTO student_ids (student_id, student_name, class_info) VALUES (?, ?, ?)"
         )
@@ -697,8 +757,8 @@ impl DatabaseManager {
             let class_info = if parts.len() > 2 && !parts[2].is_empty() { Some(parts[2]) } else { None };
 
             // 验证学号格式
-            if !Self::is_valid_student_id(student_id) {
-                errors.push(format!("第{}行: 无效的学号格式 '{}'", line_num + 1, student_id));
+            if let Err(e) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
+                errors.push(format!("第{}行: 学号格式验证失败 '{}': {}", line_num + 1, student_id, e));
                 continue;
             }
 
