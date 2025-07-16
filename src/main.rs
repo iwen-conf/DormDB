@@ -12,12 +12,14 @@ mod auth;
 mod config;
 mod database;
 mod models;
+mod routes;
 mod services;
 mod utils;
 
 use crate::api::{ApiDoc, configure_routes};
 use crate::config::AppConfig;
 use crate::database::DatabaseManager;
+use crate::routes::configure_static_routes;
 use crate::services::DatabaseService;
 
 #[actix_web::main]
@@ -101,12 +103,19 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(database_service.clone()))
             .wrap(cors)
             .wrap(Logger::default())
+            // API 路由 (优先级最高)
             .configure(configure_routes)
+            // Swagger UI
             .service(
                 SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
             )
-            // 静态文件服务
-            .service(fs::Files::new("/", "./static").index_file("index.html"))
+            // 静态资源文件服务 (CSS, JS, 图片等)
+            .service(fs::Files::new("/_nuxt", "./static/_nuxt").show_files_listing())
+            .service(fs::Files::new("/favicon.ico", "./static/favicon.ico"))
+            .service(fs::Files::new("/robots.txt", "./static/robots.txt"))
+            .service(fs::Files::new("/_payload.json", "./static/_payload.json"))
+            // 静态页面路由 (优先级最低，处理SPA路由)
+            .configure(configure_static_routes)
     })
     .bind(format!("{}:{}", config.server.host, config.server.port))?
     .run()

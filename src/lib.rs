@@ -3,6 +3,7 @@ pub mod auth;
 pub mod config;
 pub mod database;
 pub mod models;
+pub mod routes;
 pub mod services;
 pub mod utils;
 
@@ -11,5 +12,6 @@ pub use auth::*;
 pub use config::*;
 pub use database::*;
 pub use models::*;
+pub use routes::*;
 pub use services::*;
 pub use utils::*;
