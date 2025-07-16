@@ -1,5 +1,5 @@
-use actix_files::{NamedFile, Files};
-use actix_web::{web, Result, HttpRequest, HttpResponse};
+use actix_files::NamedFile;
+use actix_web::{web, Result, HttpRequest};
 use std::path::PathBuf;
 use log::{info, warn};
 
@@ -79,6 +79,7 @@ pub async fn admin_handler(path: web::Path<String>) -> Result<NamedFile> {
 }
 
 /// 404 错误处理器
+#[allow(dead_code)]
 pub async fn not_found_handler() -> Result<NamedFile> {
     warn!("返回404页面");
     Ok(NamedFile::open("static/404.html")?)
@@ -93,12 +94,19 @@ pub fn configure_static_routes(cfg: &mut web::ServiceConfig) {
         .service(
             actix_files::Files::new("/_nuxt", "static/_nuxt")
                 .show_files_listing()
+                // 开发环境禁用缓存，避免前端重新生成时的缓存问题
+                .use_etag(false)
+                .use_last_modified(false)
         )
         .service(
             actix_files::Files::new("/favicon.ico", "static/favicon.ico")
+                .use_etag(false)
+                .use_last_modified(false)
         )
         .service(
             actix_files::Files::new("/robots.txt", "static/robots.txt")
+                .use_etag(false)
+                .use_last_modified(false)
         )
         // payload 文件处理 (支持查询参数)
         .route("/_payload.json", web::get().to(payload_handler))

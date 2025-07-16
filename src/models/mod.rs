@@ -3,39 +3,34 @@ use sqlx::FromRow;
 use utoipa::ToSchema;
 
 /// 数据库申请请求
-/// 
-/// 学生申请数据库时提交的请求体。
-/// 
+///
+/// 用户申请数据库时提交的请求体。
+///
 /// # 字段说明
-/// - `identity_key`: 学生身份标识（学号），必须是10位数字且在白名单中
-/// 
-/// # 学号格式要求
-/// - 长度：必须10位
-/// - 字符：仅数字0-9
-/// - 格式：YYYYCCCCNN
-///   - YYYY: 入学年份（2000-当前年份+1）
-///   - CC: 学院代码（01-99）
-///   - CC: 班级代码（01-99）
-///   - NN: 学号序号（01-99）
-/// 
+/// - `identity_key`: 用户身份标识（编号），必须在白名单中
+///
+/// # 编号格式要求
+/// - 长度：1-50个字符
+/// - 字符：字母、数字、下划线、连字符
+/// - 限制：必须以字母或数字开头和结尾
+///
 /// # 示例
 /// ```json
 /// {
-///   "identity_key": "2023010101"
+///   "identity_key": "USER123"
 /// }
 /// ```
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ApplyRequest {
-    /// 用户身份标识（学号）
-    /// 
-    /// 必须是10位数字格式的学号，如：2023010101
-    /// 
+    /// 用户身份标识（编号）
+    ///
+    /// 可以是任何合理的用户编号，如：USER123、emp_001、ID-2024-001
+    ///
     /// 格式说明：
-    /// - 前4位：入学年份（如2023）
-    /// - 第5-6位：学院代码（如01）
-    /// - 第7-8位：班级代码（如01）
-    /// - 第9-10位：学号序号（如01）
-    #[schema(example = "2023010101", min_length = 10, max_length = 10, pattern = r"^[0-9]{10}$")]
+    /// - 长度：1-50个字符
+    /// - 字符：字母、数字、下划线、连字符
+    /// - 限制：必须以字母或数字开头和结尾
+    #[schema(example = "USER123", min_length = 1, max_length = 50, pattern = r"^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$")]
     pub identity_key: String,
 }
 
@@ -140,26 +135,26 @@ pub struct DatabaseCredentials {
     pub jdbc_url: String,
 }
 
-/// 学号管理记录
+/// 用户编号管理记录
 #[derive(Debug, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct StudentId {
     /// 记录ID
     #[schema(example = 1)]
     pub id: i32,
-    /// 学号
-    #[schema(example = "2203010301")]
+    /// 用户编号
+    #[schema(example = "USER123")]
     pub student_id: String,
-    /// 学生姓名（可选）
+    /// 用户姓名（可选）
     #[schema(example = "张三")]
     pub student_name: Option<String>,
-    /// 专业班级（可选）
+    /// 班级信息（可选）
     #[schema(example = "计算机科学与技术2022级3班")]
     pub class_info: Option<String>,
     /// 是否已申请数据库
     #[schema(example = false)]
     pub has_applied: bool,
     /// 申请的数据库名（如果已申请）
-    #[schema(example = "db_2203010301")]
+    #[schema(example = "db_USER123")]
     pub applied_db_name: Option<String>,
     /// 创建时间
     #[schema(example = "2025-07-14T10:00:00Z")]
@@ -169,27 +164,27 @@ pub struct StudentId {
     pub updated_at: String,
 }
 
-/// 学号批量导入请求
+/// 用户编号批量导入请求
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct StudentIdBatchImport {
-    /// 学号列表，每行一个学号，格式：学号,姓名,班级（姓名和班级可选）
-    #[schema(example = "2203010301,张三,计算机2022-3班\n2203010302,李四,计算机2022-3班")]
+    /// 用户编号列表，每行一个编号，格式：编号,姓名,班级（姓名和班级可选）
+    #[schema(example = "USER123,张三,计算机2022-3班\nUSER124,李四,计算机2022-3班")]
     pub student_data: String,
-    /// 是否覆盖已存在的学号
+    /// 是否覆盖已存在的编号
     #[schema(example = false)]
     pub overwrite_existing: bool,
 }
 
-/// 学号管理统计
+/// 用户编号管理统计
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct StudentIdStats {
-    /// 总学号数
+    /// 总编号数
     #[schema(example = 150)]
     pub total_count: i32,
-    /// 已申请数据库的学号数
+    /// 已申请数据库的编号数
     #[schema(example = 45)]
     pub applied_count: i32,
-    /// 未申请数据库的学号数
+    /// 未申请数据库的编号数
     #[schema(example = 105)]
     pub not_applied_count: i32,
 }
@@ -205,27 +200,27 @@ pub struct PaginationQuery {
     pub offset: Option<i32>,
 }
 
-/// 添加学号请求
+/// 添加用户编号请求
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AddStudentIdRequest {
-    /// 学号
-    #[schema(example = "2203010301")]
+    /// 用户编号
+    #[schema(example = "USER123")]
     pub student_id: String,
-    /// 学生姓名（可选）
+    /// 用户姓名（可选）
     #[schema(example = "张三")]
     pub student_name: Option<String>,
-    /// 专业班级（可选）
+    /// 班级信息（可选）
     #[schema(example = "计算机科学与技术2022级3班")]
     pub class_info: Option<String>,
 }
 
-/// 更新学号请求
+/// 更新用户编号请求
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UpdateStudentIdRequest {
-    /// 学生姓名（可选）
+    /// 用户姓名（可选）
     #[schema(example = "张三")]
     pub student_name: Option<String>,
-    /// 专业班级（可选）
+    /// 班级信息（可选）
     #[schema(example = "计算机科学与技术2022级3班")]
     pub class_info: Option<String>,
 }
@@ -342,16 +337,22 @@ impl StatusMessage {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct SystemStatus {
     /// 服务启动时间
+    #[schema(example = "运行中")]
     pub uptime: String,
     /// 数据库连接状态
+    #[schema(example = "正常")]
     pub database_status: String,
     /// MySQL连接状态
+    #[schema(example = "正常")]
     pub mysql_status: String,
     /// 总申请数量
+    #[schema(example = 156)]
     pub total_applications: i64,
     /// 今日申请数量
+    #[schema(example = 12)]
     pub today_applications: i64,
     /// 系统版本
+    #[schema(example = "1.0.0")]
     pub version: String,
 }
 
@@ -359,18 +360,25 @@ pub struct SystemStatus {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ApplicationStats {
     /// 总申请数量
+    #[schema(example = 156)]
     pub total_count: i64,
     /// 今日申请数量
+    #[schema(example = 12)]
     pub today_count: i64,
     /// 本周申请数量
+    #[schema(example = 45)]
     pub week_count: i64,
     /// 本月申请数量
+    #[schema(example = 89)]
     pub month_count: i64,
     /// 成功申请数量
+    #[schema(example = 142)]
     pub successful_count: i64,
     /// 失败申请数量
+    #[schema(example = 8)]
     pub failed_count: i64,
     /// 已删除申请数量
+    #[schema(example = 6)]
     pub deleted_count: i64,
     /// 最近申请记录
     pub recent_applications: Vec<Applicant>,

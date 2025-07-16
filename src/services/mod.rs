@@ -382,7 +382,7 @@ impl DatabaseService {
             .unwrap_or_else(|_| {
                 // 如果没有设置哈希，尝试获取明文密码（不推荐）
                 let plain_password = std::env::var("ADMIN_PASSWORD")
-                    .unwrap_or_else(|_| "admin123".to_string());
+                    .unwrap_or_else(|_| "Admin123!".to_string());
                 
                 // 动态生成哈希（仅用于向后兼容）
                 crate::auth::PasswordUtils::hash_password(&plain_password)
@@ -398,6 +398,7 @@ impl DatabaseService {
                 let auth_service = crate::auth::AuthService::new();
                 match auth_service.generate_token("admin", "admin") {
                     Ok(token) => {
+                        // 返回JSON字符串格式，与前端期望的格式一致
                         ApiResponse::success(format!("{{\"token\": \"{}\", \"message\": \"登录成功\"}}", token))
                     }
                     Err(e) => {

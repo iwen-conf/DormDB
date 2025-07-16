@@ -1,0 +1,1 @@
+import{a8 as r,D as d,a9 as c,G as s}from"./UuX0VwB7.js";const f=r(async(n,h)=>{let a,e;const{isAuthenticated:t,isAuthReady:u,checkAuthStatus:o}=d();u.value||([a,e]=c(()=>o()),await a,e());const i=n.path==="/admin/login";if(!i&&!t.value)return s("/admin/login");if(i&&t.value)return s("/admin/dashboard")});export{f as default};

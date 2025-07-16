@@ -477,36 +477,36 @@ impl DatabaseManager {
 
     /// 验证数据库名是否安全（更严格的验证）
     fn is_valid_database_name(db_name: &str) -> bool {
-        // 数据库名必须以 "db_" 开头，后面跟学号
+        // 数据库名必须以 "db_" 开头，后面跟用户编号
         if !db_name.starts_with("db_") {
             return false;
         }
-        
-        let student_id = &db_name[3..]; // 去掉 "db_" 前缀
-        
-        // 验证学号部分
-        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
+
+        let user_id = &db_name[3..]; // 去掉 "db_" 前缀
+
+        // 验证用户编号部分
+        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(user_id) {
             return false;
         }
-        
+
         // 使用基础验证
         Self::is_valid_identifier(db_name)
     }
 
     /// 验证用户名是否安全（更严格的验证）
     fn is_valid_username(username: &str) -> bool {
-        // 用户名必须以 "user_" 开头，后面跟学号
+        // 用户名必须以 "user_" 开头，后面跟用户编号
         if !username.starts_with("user_") {
             return false;
         }
-        
-        let student_id = &username[5..]; // 去掉 "user_" 前缀
-        
-        // 验证学号部分
-        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
+
+        let user_id = &username[5..]; // 去掉 "user_" 前缀
+
+        // 验证用户编号部分
+        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(user_id) {
             return false;
         }
-        
+
         // 使用基础验证
         Self::is_valid_identifier(username)
     }
@@ -640,15 +640,15 @@ impl DatabaseManager {
 
     // 学号管理功能
 
-    /// 检查学号是否存在且允许申请
+    /// 检查用户编号是否存在且允许申请
     pub async fn is_student_id_allowed(&self, student_id: &str) -> Result<bool> {
-        // 首先验证学号格式
+        // 首先验证用户编号格式
         if let Err(e) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
-            error!("学号格式验证失败: {}", e);
+            error!("用户编号格式验证失败: {}", e);
             return Ok(false);
         }
 
-        // 检查学号是否在白名单中且未申请过
+        // 检查用户编号是否在白名单中且未申请过
         let count: i32 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM student_ids WHERE student_id = ? AND has_applied = 0"
         )
@@ -657,11 +657,11 @@ impl DatabaseManager {
         .await?;
 
         if count == 0 {
-            warn!("学号 {} 不在白名单中或已申请过数据库", student_id);
+            warn!("用户编号 {} 不在白名单中或已申请过数据库", student_id);
             return Ok(false);
         }
 
-        info!("学号 {} 验证通过", student_id);
+        info!("用户编号 {} 验证通过", student_id);
         Ok(true)
     }
 
@@ -694,9 +694,9 @@ impl DatabaseManager {
         Ok(student_ids)
     }
 
-    /// 添加单个学号
+    /// 添加单个用户编号
     pub async fn add_student_id(&self, student_id: &str, student_name: Option<&str>, class_info: Option<&str>) -> Result<()> {
-        // 验证学号格式
+        // 验证用户编号格式
         crate::auth::StudentValidator::validate_student_id_format(student_id)?;
 
         sqlx::query(
@@ -756,9 +756,9 @@ impl DatabaseManager {
             let student_name = if parts.len() > 1 && !parts[1].is_empty() { Some(parts[1]) } else { None };
             let class_info = if parts.len() > 2 && !parts[2].is_empty() { Some(parts[2]) } else { None };
 
-            // 验证学号格式
+            // 验证用户编号格式
             if let Err(e) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
-                errors.push(format!("第{}行: 学号格式验证失败 '{}': {}", line_num + 1, student_id, e));
+                errors.push(format!("第{}行: 用户编号格式验证失败 '{}': {}", line_num + 1, student_id, e));
                 continue;
             }
 
@@ -820,6 +820,7 @@ impl DatabaseManager {
     }
 
     /// 验证学号格式
+    #[allow(dead_code)]
     fn is_valid_student_id(student_id: &str) -> bool {
         // 学号应该是10位数字
         student_id.len() == 10 && student_id.chars().all(|c| c.is_ascii_digit())

@@ -1,7 +1,7 @@
 use actix_web::{dev::ServiceRequest, Error, HttpMessage};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use anyhow::Result;
-use chrono::{Duration, Utc, Datelike};
+use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -85,12 +85,13 @@ impl AuthService {
 }
 
 // 管理员认证中间件
+#[allow(dead_code)]
 pub async fn admin_auth_middleware(
     req: ServiceRequest,
     credentials: BearerAuth,
 ) -> Result<ServiceRequest, Error> {
     let auth_service = AuthService::new();
-    
+
     match auth_service.verify_admin_token(credentials.token()) {
         Ok(claims) => {
             // 将用户信息存储到请求扩展中
@@ -122,6 +123,7 @@ impl PasswordUtils {
     }
 
     /// 生成强密码
+    #[allow(dead_code)]
     pub fn generate_strong_password(length: usize) -> String {
         use rand::Rng;
         use rand::seq::SliceRandom;
@@ -189,54 +191,37 @@ impl PasswordUtils {
 pub struct StudentValidator;
 
 impl StudentValidator {
-    /// 验证学号格式
+    /// 验证用户编号格式
+    ///
+    /// 现在接受任何合理的编号格式，不再限制为特定的学号格式
     pub fn validate_student_id_format(student_id: &str) -> Result<()> {
-        // 学号必须是10位数字
-        if student_id.len() != 10 {
-            return Err(anyhow::anyhow!("学号必须是10位数字"));
+        // 编号不能为空
+        if student_id.is_empty() {
+            return Err(anyhow::anyhow!("编号不能为空"));
         }
 
-        if !student_id.chars().all(|c| c.is_ascii_digit()) {
-            return Err(anyhow::anyhow!("学号只能包含数字"));
+        // 编号长度限制（1-50个字符）
+        if student_id.len() > 50 {
+            return Err(anyhow::anyhow!("编号长度不能超过50个字符"));
         }
 
-        // 验证学号的年份部分（前4位）
-        let year: i32 = student_id[0..4].parse()
-            .map_err(|_| anyhow::anyhow!("学号年份格式无效"))?;
-
-        let current_year = chrono::Utc::now().year();
-        if year < 2000 || year > current_year + 1 {
-            return Err(anyhow::anyhow!("学号年份不在有效范围内"));
+        // 编号只能包含字母、数字、下划线和连字符
+        if !student_id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+            return Err(anyhow::anyhow!("编号只能包含字母、数字、下划线和连字符"));
         }
 
-        // 验证学院和专业代码（第5-6位）
-        let college_code: i32 = student_id[4..6].parse()
-            .map_err(|_| anyhow::anyhow!("学院代码格式无效"))?;
-
-        if college_code < 1 || college_code > 99 {
-            return Err(anyhow::anyhow!("学院代码不在有效范围内"));
-        }
-
-        // 验证班级代码（第7-8位）
-        let class_code: i32 = student_id[6..8].parse()
-            .map_err(|_| anyhow::anyhow!("班级代码格式无效"))?;
-
-        if class_code < 1 || class_code > 99 {
-            return Err(anyhow::anyhow!("班级代码不在有效范围内"));
-        }
-
-        // 验证学号序号（第9-10位）
-        let student_number: i32 = student_id[8..10].parse()
-            .map_err(|_| anyhow::anyhow!("学号序号格式无效"))?;
-
-        if student_number < 1 || student_number > 99 {
-            return Err(anyhow::anyhow!("学号序号不在有效范围内"));
+        // 编号不能以特殊字符开头或结尾
+        let first_char = student_id.chars().next().unwrap();
+        let last_char = student_id.chars().last().unwrap();
+        if !first_char.is_alphanumeric() || !last_char.is_alphanumeric() {
+            return Err(anyhow::anyhow!("编号必须以字母或数字开头和结尾"));
         }
 
         Ok(())
     }
 
     /// 验证学号是否在白名单中
+    #[allow(dead_code)]
     pub fn validate_student_id_whitelist(student_id: &str, whitelist: &[String]) -> Result<()> {
         if whitelist.is_empty() {
             return Err(anyhow::anyhow!("学号白名单为空，无法验证"));
@@ -251,11 +236,13 @@ impl StudentValidator {
 }
 
 // 会话管理
+#[allow(dead_code)]
 pub struct SessionManager {
     // 在实际应用中，这应该存储在Redis或数据库中
     // 这里为了简化使用内存存储
 }
 
+#[allow(dead_code)]
 impl SessionManager {
     pub fn new() -> Self {
         Self {}
@@ -291,11 +278,22 @@ mod tests {
 
     #[test]
     fn test_student_id_validation() {
-        assert!(StudentValidator::validate_student_id_format("2023010101").is_ok());
-        assert!(StudentValidator::validate_student_id_format("202301010").is_err()); // 9位
-        assert!(StudentValidator::validate_student_id_format("20230101011").is_err()); // 11位
-        assert!(StudentValidator::validate_student_id_format("202301010a").is_err()); // 含字母
-        assert!(StudentValidator::validate_student_id_format("1999010101").is_err()); // 年份太早
+        // 有效的编号格式
+        assert!(StudentValidator::validate_student_id_format("2023010101").is_ok()); // 传统学号
+        assert!(StudentValidator::validate_student_id_format("USER123").is_ok()); // 字母数字组合
+        assert!(StudentValidator::validate_student_id_format("emp_001").is_ok()); // 下划线
+        assert!(StudentValidator::validate_student_id_format("ID-2024-001").is_ok()); // 连字符
+        assert!(StudentValidator::validate_student_id_format("A").is_ok()); // 单字符
+        assert!(StudentValidator::validate_student_id_format("123").is_ok()); // 纯数字
+
+        // 无效的编号格式
+        assert!(StudentValidator::validate_student_id_format("").is_err()); // 空字符串
+        assert!(StudentValidator::validate_student_id_format("_invalid").is_err()); // 下划线开头
+        assert!(StudentValidator::validate_student_id_format("invalid_").is_err()); // 下划线结尾
+        assert!(StudentValidator::validate_student_id_format("-invalid").is_err()); // 连字符开头
+        assert!(StudentValidator::validate_student_id_format("invalid-").is_err()); // 连字符结尾
+        assert!(StudentValidator::validate_student_id_format("user@domain").is_err()); // 包含特殊字符
+        assert!(StudentValidator::validate_student_id_format(&"a".repeat(51)).is_err()); // 超长
     }
 
     #[test]
@@ -307,5 +305,51 @@ mod tests {
         let claims = auth_service.validate_token(&token).unwrap();
         assert_eq!(claims.sub, "test_user");
         assert_eq!(claims.role, "admin");
+    }
+
+    #[test]
+    fn test_flexible_user_id_formats() {
+        // 测试各种有效的用户编号格式
+        let valid_ids = vec![
+            "USER123",
+            "emp_001",
+            "ID-2024-001",
+            "A",
+            "123",
+            "2023010101", // 传统学号格式
+            "student_2024",
+            "ADMIN",
+            "test123",
+            "user-456",
+            "a1",
+            "Z9",
+            "user_123_test",
+            "ID-001-002-003",
+        ];
+
+        for id in valid_ids {
+            assert!(StudentValidator::validate_student_id_format(id).is_ok(),
+                   "应该接受有效编号: {}", id);
+        }
+
+        // 测试无效的编号格式
+        let long_string = "a".repeat(51);
+        let invalid_ids = vec![
+            "",              // 空字符串
+            "_invalid",      // 下划线开头
+            "invalid_",      // 下划线结尾
+            "-invalid",      // 连字符开头
+            "invalid-",      // 连字符结尾
+            "user@domain",   // 包含特殊字符
+            "user space",    // 包含空格
+            "user#123",      // 包含井号
+            "user.123",      // 包含点号
+            &long_string,    // 超长
+        ];
+
+        for id in invalid_ids {
+            assert!(StudentValidator::validate_student_id_format(id).is_err(),
+                   "应该拒绝无效编号: {}", id);
+        }
     }
 }

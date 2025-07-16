@@ -1,5 +1,4 @@
 use actix_cors::Cors;
-use actix_files as fs;
 use actix_web::{App, HttpServer, middleware::Logger, web};
 use dotenv::dotenv;
 use log::info;
@@ -109,12 +108,7 @@ async fn main() -> std::io::Result<()> {
             .service(
                 SwaggerUi::new("/swagger-ui/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
             )
-            // 静态资源文件服务 (CSS, JS, 图片等)
-            .service(fs::Files::new("/_nuxt", "./static/_nuxt").show_files_listing())
-            .service(fs::Files::new("/favicon.ico", "./static/favicon.ico"))
-            .service(fs::Files::new("/robots.txt", "./static/robots.txt"))
-            .service(fs::Files::new("/_payload.json", "./static/_payload.json"))
-            // 静态页面路由 (优先级最低，处理SPA路由)
+            // 静态页面路由 (包含静态资源服务)
             .configure(configure_static_routes)
     })
     .bind(format!("{}:{}", config.server.host, config.server.port))?
