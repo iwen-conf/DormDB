@@ -81,7 +81,7 @@ impl AuthService {
     /// 验证管理员权限
     pub fn verify_admin_token(&self, token: &str) -> Result<Claims> {
         let claims = self.validate_token(token)?;
-        
+
         if claims.role != "admin" {
             return Err(anyhow::anyhow!("权限不足：需要管理员权限"));
         }
@@ -190,7 +190,7 @@ impl PasswordUtils {
 
         let has_lowercase = password.chars().any(|c| c.is_lowercase());
         let has_uppercase = password.chars().any(|c| c.is_uppercase());
-        let has_digit = password.chars().any(|c| c.is_digit(10));
+        let has_digit = password.chars().any(|c| c.is_ascii_digit());
         let has_symbol = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
 
         if !has_lowercase {
