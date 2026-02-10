@@ -22,6 +22,12 @@ pub struct AuthService {
     jwt_secret: String,
 }
 
+impl Default for AuthService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuthService {
     pub fn new() -> Self {
         let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
@@ -260,6 +266,12 @@ impl StudentValidator {
 pub struct SessionManager {
     // 在实际应用中，这应该存储在Redis或数据库中
     // 这里为了简化使用内存存储
+}
+
+impl Default for SessionManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[allow(dead_code)]
