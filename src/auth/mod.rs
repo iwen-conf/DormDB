@@ -91,14 +91,34 @@ pub async fn admin_auth_middleware(
     credentials: BearerAuth,
 ) -> Result<ServiceRequest, Error> {
     let auth_service = AuthService::new();
+    let debug_enabled = std::env::var("DEBUG_UI_UX_FIX")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if debug_enabled {
+        info!(
+            "DEBUG: admin_auth_middleware path={} token_len={}",
+            req.path(),
+            credentials.token().len()
+        );
+    }
 
     match auth_service.verify_admin_token(credentials.token()) {
         Ok(claims) => {
+            if debug_enabled {
+                info!(
+                    "DEBUG: admin_auth_middleware success sub={} role={}",
+                    claims.sub, claims.role
+                );
+            }
             // 将用户信息存储到请求扩展中
             req.extensions_mut().insert(claims);
             Ok(req)
         }
         Err(e) => {
+            if debug_enabled {
+                info!("DEBUG: admin_auth_middleware failed error={}", e);
+            }
             error!("管理员认证失败: {}", e);
             Err(actix_web::error::ErrorUnauthorized("无效的管理员令牌"))
         }
