@@ -30,7 +30,12 @@ pub struct ApplyRequest {
     /// - 长度：1-50个字符
     /// - 字符：字母、数字、下划线、连字符
     /// - 限制：必须以字母或数字开头和结尾
-    #[schema(example = "USER123", min_length = 1, max_length = 50, pattern = r"^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$")]
+    #[schema(
+        example = "USER123",
+        min_length = 1,
+        max_length = 50,
+        pattern = r"^[a-zA-Z0-9][a-zA-Z0-9_-]*[a-zA-Z0-9]$"
+    )]
     pub identity_key: String,
 }
 
@@ -66,21 +71,21 @@ impl<T> ApiResponse<T> {
 }
 
 /// 数据库申请成功后的响应数据
-/// 
+///
 /// 申请成功后系统返回的数据库连接信息。
-/// 
+///
 /// # 安全说明
 /// - 密码为系统随机生成的16位强密码
 /// - 用户只能访问自己的数据库
 /// - 权限仅限于数据操作（SELECT、INSERT、UPDATE、DELETE等）
 /// - 禁止结构操作（CREATE、DROP、ALTER等）
-/// 
+///
 /// # 连接方式
 /// 可以使用以下任一方式连接：
 /// 1. 使用connection_string（推荐）
 /// 2. 使用jdbc_url（Java应用）
 /// 3. 使用单独的连接参数
-/// 
+///
 /// # 注意事项
 /// - 请妥善保管密码，系统不会再次提供
 /// - 连接字符串包含`allowPublicKeyRetrieval=true`参数，用于MySQL 8.0+兼容性
@@ -89,45 +94,45 @@ impl<T> ApiResponse<T> {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct DatabaseCredentials {
     /// 数据库主机地址
-    /// 
+    ///
     /// MySQL服务器的主机地址，通常是localhost或具体的IP地址
     #[schema(example = "localhost")]
     pub db_host: String,
-    
+
     /// 数据库端口
-    /// 
+    ///
     /// MySQL服务器的端口号，默认为3306
     #[schema(example = 3306)]
     pub db_port: u16,
-    
+
     /// 数据库名称
-    /// 
+    ///
     /// 为用户创建的数据库名称，格式为 db_学号
     #[schema(example = "db_2023010101")]
     pub db_name: String,
-    
+
     /// 数据库用户名
-    /// 
+    ///
     /// 为用户创建的数据库用户名，格式为 user_学号
     #[schema(example = "user_2023010101")]
     pub username: String,
-    
+
     /// 数据库密码
-    /// 
+    ///
     /// 系统生成的16位强密码，包含大小写字母、数字和特殊字符
     #[schema(example = "Abc123!@#DefGhi4")]
     pub password: String,
-    
+
     /// 完整的连接字符串 (推荐使用)
-    /// 
+    ///
     /// 包含所有必要参数的MySQL连接字符串，可直接用于大多数数据库客户端
     #[schema(
         example = "mysql://user_2023010101:Abc123!@#DefGhi4@localhost:3306/db_2023010101?allowPublicKeyRetrieval=true&useSSL=false"
     )]
     pub connection_string: String,
-    
+
     /// JDBC 连接字符串 (Java应用使用)
-    /// 
+    ///
     /// 专门为Java应用程序设计的JDBC连接字符串
     #[schema(
         example = "jdbc:mysql://localhost:3306/db_2023010101?allowPublicKeyRetrieval=true&useSSL=false&user=user_2023010101&password=Abc123!@#DefGhi4"

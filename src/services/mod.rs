@@ -3,7 +3,10 @@ use crate::models::{
     ApiResponse, Applicant, ApplicationStats, DatabaseCredentials, StatusCode, StatusMessage,
     SystemStatus,
 };
-use crate::utils::{generate_secure_password, validate_identity_key};
+use crate::{
+    auth::StudentValidator,
+    utils::{generate_secure_password, validate_identity_key},
+};
 use chrono::Utc;
 use log::{error, info, warn};
 use std::sync::Arc;
@@ -28,6 +31,23 @@ impl DatabaseService {
         );
 
         // 1. 验证输入参数
+        if let Err(e) = StudentValidator::validate_student_id_format(identity_key) {
+            warn!(
+                "[申请失败] 身份标识格式不符合业务规则: {}, 错误: {}, 时间: {}",
+                identity_key,
+                e,
+                Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+            );
+            return ApiResponse::error(
+                StatusCode::INVALID_INPUT,
+                format!(
+                    "{} (identity_key={})",
+                    StatusMessage::INVALID_INPUT,
+                    identity_key
+                ),
+            );
+        }
+
         if !validate_identity_key(identity_key) {
             warn!(
                 "[申请失败] 无效的身份标识: {}, 时间: {}",
@@ -370,36 +390,49 @@ impl DatabaseService {
     /// 管理员登录验证
     pub async fn admin_login(&self, password: &str) -> ApiResponse<String> {
         info!("管理员登录验证");
-
-        // 验证密码强度
-        if let Err(e) = crate::auth::PasswordUtils::validate_password_strength(password) {
-            warn!("管理员登录失败：密码强度不足 - {}", e);
-            return ApiResponse::error(40102, "密码强度不足".to_string());
+        let debug_enabled = std::env::var("DEBUG_UI_UX_FIX")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if debug_enabled {
+            info!(
+                "DEBUG: admin_login start password_len={} env_hash_set={} env_pwd_set={}",
+                password.len(),
+                std::env::var("ADMIN_PASSWORD_HASH").is_ok(),
+                std::env::var("ADMIN_PASSWORD").is_ok()
+            );
         }
 
         // 从配置中获取管理员密码哈希
-        let admin_password_hash = std::env::var("ADMIN_PASSWORD_HASH")
-            .unwrap_or_else(|_| {
-                // 如果没有设置哈希，尝试获取明文密码（不推荐）
-                let plain_password = std::env::var("ADMIN_PASSWORD")
-                    .unwrap_or_else(|_| "Admin123!".to_string());
-                
-                // 动态生成哈希（仅用于向后兼容）
-                crate::auth::PasswordUtils::hash_password(&plain_password)
-                    .unwrap_or_else(|_| "$2b$12$invalid_hash".to_string())
-            });
+        let admin_password_hash = std::env::var("ADMIN_PASSWORD_HASH").unwrap_or_else(|_| {
+            // 如果没有设置哈希，尝试获取明文密码（不推荐）
+            let plain_password =
+                std::env::var("ADMIN_PASSWORD").unwrap_or_else(|_| "admin123".to_string());
+
+            // 动态生成哈希（仅用于向后兼容）
+            crate::auth::PasswordUtils::hash_password(&plain_password)
+                .unwrap_or_else(|_| "$2b$12$invalid_hash".to_string())
+        });
 
         // 验证密码
         match crate::auth::PasswordUtils::verify_password(password, &admin_password_hash) {
             Ok(true) => {
                 info!("管理员登录成功");
-                
+                if debug_enabled {
+                    info!("DEBUG: admin_login password_verified=true");
+                }
+
                 // 生成JWT令牌
                 let auth_service = crate::auth::AuthService::new();
                 match auth_service.generate_token("admin", "admin") {
                     Ok(token) => {
+                        if debug_enabled {
+                            info!("DEBUG: admin_login token_generated_len={}", token.len());
+                        }
                         // 返回JSON字符串格式，与前端期望的格式一致
-                        ApiResponse::success(format!("{{\"token\": \"{}\", \"message\": \"登录成功\"}}", token))
+                        ApiResponse::success(format!(
+                            "{{\"token\": \"{}\", \"message\": \"登录成功\"}}",
+                            token
+                        ))
                     }
                     Err(e) => {
                         error!("生成令牌失败: {}", e);
@@ -409,6 +442,9 @@ impl DatabaseService {
             }
             Ok(false) => {
                 warn!("管理员登录失败：密码错误");
+                if debug_enabled {
+                    info!("DEBUG: admin_login password_verified=false");
+                }
                 ApiResponse::error(40101, "密码错误".to_string())
             }
             Err(e) => {
@@ -462,7 +498,11 @@ impl DatabaseService {
     // 学号管理服务
 
     /// 获取学号列表
-    pub async fn get_student_ids(&self, limit: Option<i32>, offset: Option<i32>) -> ApiResponse<Vec<crate::models::StudentId>> {
+    pub async fn get_student_ids(
+        &self,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> ApiResponse<Vec<crate::models::StudentId>> {
         info!("获取学号列表");
 
         match self.db_manager.get_all_student_ids(limit, offset).await {
@@ -478,10 +518,19 @@ impl DatabaseService {
     }
 
     /// 添加学号
-    pub async fn add_student_id(&self, student_id: &str, student_name: Option<&str>, class_info: Option<&str>) -> ApiResponse<String> {
+    pub async fn add_student_id(
+        &self,
+        student_id: &str,
+        student_name: Option<&str>,
+        class_info: Option<&str>,
+    ) -> ApiResponse<String> {
         info!("添加学号: {}", student_id);
 
-        match self.db_manager.add_student_id(student_id, student_name, class_info).await {
+        match self
+            .db_manager
+            .add_student_id(student_id, student_name, class_info)
+            .await
+        {
             Ok(_) => {
                 info!("学号添加成功: {}", student_id);
                 ApiResponse::success("学号添加成功".to_string())
@@ -498,12 +547,25 @@ impl DatabaseService {
     }
 
     /// 批量导入学号
-    pub async fn batch_import_student_ids(&self, student_data: &str, overwrite_existing: bool) -> ApiResponse<crate::models::BatchImportResult> {
+    pub async fn batch_import_student_ids(
+        &self,
+        student_data: &str,
+        overwrite_existing: bool,
+    ) -> ApiResponse<crate::models::BatchImportResult> {
         info!("批量导入学号");
 
-        match self.db_manager.batch_import_student_ids(student_data, overwrite_existing).await {
+        match self
+            .db_manager
+            .batch_import_student_ids(student_data, overwrite_existing)
+            .await
+        {
             Ok((imported_count, updated_count, errors)) => {
-                info!("批量导入完成: 导入{}条, 更新{}条, 错误{}条", imported_count, updated_count, errors.len());
+                info!(
+                    "批量导入完成: 导入{}条, 更新{}条, 错误{}条",
+                    imported_count,
+                    updated_count,
+                    errors.len()
+                );
                 ApiResponse::success(crate::models::BatchImportResult {
                     imported_count,
                     updated_count,
@@ -518,10 +580,19 @@ impl DatabaseService {
     }
 
     /// 更新学号信息
-    pub async fn update_student_id(&self, id: i32, student_name: Option<&str>, class_info: Option<&str>) -> ApiResponse<String> {
+    pub async fn update_student_id(
+        &self,
+        id: i32,
+        student_name: Option<&str>,
+        class_info: Option<&str>,
+    ) -> ApiResponse<String> {
         info!("更新学号信息: ID {}", id);
 
-        match self.db_manager.update_student_id(id, student_name, class_info).await {
+        match self
+            .db_manager
+            .update_student_id(id, student_name, class_info)
+            .await
+        {
             Ok(_) => {
                 info!("学号信息更新成功: ID {}", id);
                 ApiResponse::success("学号信息更新成功".to_string())
@@ -584,10 +655,18 @@ impl DatabaseService {
     }
 
     /// 删除用户（通过身份标识）
-    pub async fn delete_user_by_identity(&self, identity_key: &str, reason: &str) -> ApiResponse<String> {
+    pub async fn delete_user_by_identity(
+        &self,
+        identity_key: &str,
+        reason: &str,
+    ) -> ApiResponse<String> {
         info!("删除用户: {}, 原因: {}", identity_key, reason);
 
-        match self.db_manager.admin_delete_user(identity_key, reason).await {
+        match self
+            .db_manager
+            .admin_delete_user(identity_key, reason)
+            .await
+        {
             Ok(_) => {
                 info!("用户删除成功: {}", identity_key);
                 ApiResponse::success("用户删除成功".to_string())
@@ -700,7 +779,7 @@ mod tests {
         // 验证密码包含各种字符类型
         let has_lowercase = password.chars().any(|c| c.is_lowercase());
         let has_uppercase = password.chars().any(|c| c.is_uppercase());
-        let has_digit = password.chars().any(|c| c.is_digit(10));
+        let has_digit = password.chars().any(|c| c.is_ascii_digit());
         let has_symbol = password.chars().any(|c| "!@#$%^&*".contains(c));
 
         assert!(has_lowercase, "Password should contain lowercase letters");

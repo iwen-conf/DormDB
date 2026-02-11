@@ -11,6 +11,24 @@ pub struct DatabaseManager {
 }
 
 impl DatabaseManager {
+    fn build_sqlite_url(sqlite_path: &str) -> String {
+        if sqlite_path.starts_with("sqlite:") {
+            if sqlite_path.contains("mode=") {
+                return sqlite_path.to_string();
+            }
+            if sqlite_path.contains('?') {
+                return format!("{}&mode=rwc", sqlite_path);
+            }
+            return format!("{}?mode=rwc", sqlite_path);
+        }
+
+        if sqlite_path == ":memory:" {
+            return "sqlite::memory:".to_string();
+        }
+
+        format!("sqlite://{}?mode=rwc", sqlite_path)
+    }
+
     pub async fn new(config: &AppConfig) -> Result<Self> {
         Self::new_with_retry(config, 3).await
     }
@@ -42,13 +60,14 @@ impl DatabaseManager {
         for attempt in 1..=max_retries {
             info!("尝试连接 SQLite 数据库 (第 {} 次)", attempt);
 
+            let sqlite_url = Self::build_sqlite_url(&config.database.sqlite_path);
             match sqlx::sqlite::SqlitePoolOptions::new()
                 .max_connections(20) // 增加最大连接数
                 .min_connections(2) // 设置最小连接数
                 .acquire_timeout(std::time::Duration::from_secs(10)) // 获取连接超时
                 .idle_timeout(std::time::Duration::from_secs(300)) // 空闲连接超时
                 .max_lifetime(std::time::Duration::from_secs(1800)) // 连接最大生命周期
-                .connect(&format!("sqlite:{}", config.database.sqlite_path))
+                .connect(&sqlite_url)
                 .await
             {
                 Ok(pool) => {
@@ -161,9 +180,7 @@ impl DatabaseManager {
                             .await;
 
                             // 删除旧表
-                            let _ = sqlx::query("DROP TABLE applicants")
-                                .execute(&pool)
-                                .await;
+                            let _ = sqlx::query("DROP TABLE applicants").execute(&pool).await;
 
                             // 重命名新表
                             let _ = sqlx::query("ALTER TABLE applicants_new RENAME TO applicants")
@@ -311,9 +328,7 @@ impl DatabaseManager {
         let is_dev_mode = std::env::var("DEV_MODE").unwrap_or_default() == "true";
         if allowed_host == "%" && !is_dev_mode {
             error!("安全违规: 生产环境禁止使用通配符主机 '%'");
-            return Err(anyhow::anyhow!(
-                "安全错误: 不允许使用通配符主机 '%'"
-            ));
+            return Err(anyhow::anyhow!("安全错误: 不允许使用通配符主机 '%'"));
         }
 
         if allowed_host == "%" && is_dev_mode {
@@ -335,7 +350,7 @@ impl DatabaseManager {
             error!("数据库名不符合安全规范: {}", sanitized_db_name);
             return Err(anyhow::anyhow!("数据库名不符合安全规范"));
         }
-        
+
         let create_db_sql = format!("CREATE DATABASE IF NOT EXISTS `{}`", sanitized_db_name);
         if let Err(e) = sqlx::query(&create_db_sql).execute(&self.mysql_pool).await {
             error!("创建数据库失败: {}, SQL: {}", e, create_db_sql);
@@ -354,13 +369,15 @@ impl DatabaseManager {
         }
 
         info!("步骤 2: 创建用户 {}@{}", username, allowed_host);
-        
+
         // 创建用户时使用预处理语句（某些MySQL版本支持）
         let create_user_sql = format!(
             "CREATE USER IF NOT EXISTS '{}'@'{}' IDENTIFIED BY '{}'",
-            username, allowed_host, password.replace("'", "''") // 转义单引号
+            username,
+            allowed_host,
+            password.replace("'", "''") // 转义单引号
         );
-        
+
         if let Err(e) = sqlx::query(&create_user_sql)
             .execute(&self.mysql_pool)
             .await
@@ -485,7 +502,7 @@ impl DatabaseManager {
         let user_id = &db_name[3..]; // 去掉 "db_" 前缀
 
         // 验证用户编号部分
-        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(user_id) {
+        if crate::auth::StudentValidator::validate_student_id_format(user_id).is_err() {
             return false;
         }
 
@@ -503,7 +520,7 @@ impl DatabaseManager {
         let user_id = &username[5..]; // 去掉 "user_" 前缀
 
         // 验证用户编号部分
-        if let Err(_) = crate::auth::StudentValidator::validate_student_id_format(user_id) {
+        if crate::auth::StudentValidator::validate_student_id_format(user_id).is_err() {
             return false;
         }
 
@@ -650,7 +667,7 @@ impl DatabaseManager {
 
         // 检查用户编号是否在白名单中且未申请过
         let count: i32 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM student_ids WHERE student_id = ? AND has_applied = 0"
+            "SELECT COUNT(*) FROM student_ids WHERE student_id = ? AND has_applied = 0",
         )
         .bind(student_id)
         .fetch_one(&self.sqlite_pool)
@@ -679,7 +696,11 @@ impl DatabaseManager {
     }
 
     /// 获取所有学号记录
-    pub async fn get_all_student_ids(&self, limit: Option<i32>, offset: Option<i32>) -> Result<Vec<crate::models::StudentId>> {
+    pub async fn get_all_student_ids(
+        &self,
+        limit: Option<i32>,
+        offset: Option<i32>,
+    ) -> Result<Vec<crate::models::StudentId>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
 
@@ -695,12 +716,17 @@ impl DatabaseManager {
     }
 
     /// 添加单个用户编号
-    pub async fn add_student_id(&self, student_id: &str, student_name: Option<&str>, class_info: Option<&str>) -> Result<()> {
+    pub async fn add_student_id(
+        &self,
+        student_id: &str,
+        student_name: Option<&str>,
+        class_info: Option<&str>,
+    ) -> Result<()> {
         // 验证用户编号格式
         crate::auth::StudentValidator::validate_student_id_format(student_id)?;
 
         sqlx::query(
-            "INSERT INTO student_ids (student_id, student_name, class_info) VALUES (?, ?, ?)"
+            "INSERT INTO student_ids (student_id, student_name, class_info) VALUES (?, ?, ?)",
         )
         .bind(student_id)
         .bind(student_name)
@@ -712,7 +738,12 @@ impl DatabaseManager {
     }
 
     /// 更新学号信息
-    pub async fn update_student_id(&self, id: i32, student_name: Option<&str>, class_info: Option<&str>) -> Result<()> {
+    pub async fn update_student_id(
+        &self,
+        id: i32,
+        student_name: Option<&str>,
+        class_info: Option<&str>,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE student_ids SET student_name = ?, class_info = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         )
@@ -736,7 +767,11 @@ impl DatabaseManager {
     }
 
     /// 批量导入学号
-    pub async fn batch_import_student_ids(&self, student_data: &str, overwrite_existing: bool) -> Result<(i32, i32, Vec<String>)> {
+    pub async fn batch_import_student_ids(
+        &self,
+        student_data: &str,
+        overwrite_existing: bool,
+    ) -> Result<(i32, i32, Vec<String>)> {
         let mut imported_count = 0;
         let mut updated_count = 0;
         let mut errors = Vec::new();
@@ -753,21 +788,35 @@ impl DatabaseManager {
             }
 
             let student_id = parts[0];
-            let student_name = if parts.len() > 1 && !parts[1].is_empty() { Some(parts[1]) } else { None };
-            let class_info = if parts.len() > 2 && !parts[2].is_empty() { Some(parts[2]) } else { None };
+            let student_name = if parts.len() > 1 && !parts[1].is_empty() {
+                Some(parts[1])
+            } else {
+                None
+            };
+            let class_info = if parts.len() > 2 && !parts[2].is_empty() {
+                Some(parts[2])
+            } else {
+                None
+            };
 
             // 验证用户编号格式
             if let Err(e) = crate::auth::StudentValidator::validate_student_id_format(student_id) {
-                errors.push(format!("第{}行: 用户编号格式验证失败 '{}': {}", line_num + 1, student_id, e));
+                errors.push(format!(
+                    "第{}行: 用户编号格式验证失败 '{}': {}",
+                    line_num + 1,
+                    student_id,
+                    e
+                ));
                 continue;
             }
 
             // 检查是否已存在
-            let exists: i32 = sqlx::query_scalar("SELECT COUNT(*) FROM student_ids WHERE student_id = ?")
-                .bind(student_id)
-                .fetch_one(&self.sqlite_pool)
-                .await
-                .unwrap_or(0);
+            let exists: i32 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM student_ids WHERE student_id = ?")
+                    .bind(student_id)
+                    .fetch_one(&self.sqlite_pool)
+                    .await
+                    .unwrap_or(0);
 
             if exists > 0 {
                 if overwrite_existing {
@@ -785,11 +834,18 @@ impl DatabaseManager {
                         updated_count += 1;
                     }
                 } else {
-                    errors.push(format!("第{}行: 学号 '{}' 已存在", line_num + 1, student_id));
+                    errors.push(format!(
+                        "第{}行: 学号 '{}' 已存在",
+                        line_num + 1,
+                        student_id
+                    ));
                 }
             } else {
                 // 插入新记录
-                if let Err(e) = self.add_student_id(student_id, student_name, class_info).await {
+                if let Err(e) = self
+                    .add_student_id(student_id, student_name, class_info)
+                    .await
+                {
                     errors.push(format!("第{}行: 插入失败 - {}", line_num + 1, e));
                 } else {
                     imported_count += 1;
@@ -806,9 +862,10 @@ impl DatabaseManager {
             .fetch_one(&self.sqlite_pool)
             .await?;
 
-        let applied_count: i32 = sqlx::query_scalar("SELECT COUNT(*) FROM student_ids WHERE has_applied = 1")
-            .fetch_one(&self.sqlite_pool)
-            .await?;
+        let applied_count: i32 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM student_ids WHERE has_applied = 1")
+                .fetch_one(&self.sqlite_pool)
+                .await?;
 
         let not_applied_count = total_count - applied_count;
 

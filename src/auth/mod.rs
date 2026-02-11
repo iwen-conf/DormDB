@@ -1,8 +1,8 @@
-use actix_web::{dev::ServiceRequest, Error, HttpMessage};
+use actix_web::{Error, HttpMessage, dev::ServiceRequest};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -95,7 +95,7 @@ impl AuthService {
 pub async fn admin_auth_middleware(
     req: ServiceRequest,
     credentials: BearerAuth,
-) -> Result<ServiceRequest, Error> {
+) -> Result<ServiceRequest, (Error, ServiceRequest)> {
     let auth_service = AuthService::new();
     let debug_enabled = std::env::var("DEBUG_UI_UX_FIX")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
@@ -126,7 +126,7 @@ pub async fn admin_auth_middleware(
                 info!("DEBUG: admin_auth_middleware failed error={}", e);
             }
             error!("管理员认证失败: {}", e);
-            Err(actix_web::error::ErrorUnauthorized("无效的管理员令牌"))
+            Err((actix_web::error::ErrorUnauthorized("无效的管理员令牌"), req))
         }
     }
 }
@@ -161,16 +161,31 @@ impl PasswordUtils {
         let symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?";
 
         let mut password = vec![
-            lowercase.chars().nth(rng.gen_range(0..lowercase.len())).unwrap(),
-            uppercase.chars().nth(rng.gen_range(0..uppercase.len())).unwrap(),
-            numbers.chars().nth(rng.gen_range(0..numbers.len())).unwrap(),
-            symbols.chars().nth(rng.gen_range(0..symbols.len())).unwrap(),
+            lowercase
+                .chars()
+                .nth(rng.gen_range(0..lowercase.len()))
+                .unwrap(),
+            uppercase
+                .chars()
+                .nth(rng.gen_range(0..uppercase.len()))
+                .unwrap(),
+            numbers
+                .chars()
+                .nth(rng.gen_range(0..numbers.len()))
+                .unwrap(),
+            symbols
+                .chars()
+                .nth(rng.gen_range(0..symbols.len()))
+                .unwrap(),
         ];
 
         let all_chars = format!("{}{}{}{}", lowercase, uppercase, numbers, symbols);
         for _ in 4..length {
             password.push(
-                all_chars.chars().nth(rng.gen_range(0..all_chars.len())).unwrap(),
+                all_chars
+                    .chars()
+                    .nth(rng.gen_range(0..all_chars.len()))
+                    .unwrap(),
             );
         }
 
@@ -178,6 +193,7 @@ impl PasswordUtils {
         password.into_iter().collect()
     }
 
+    #[allow(dead_code)]
     /// 验证密码强度
     pub fn validate_password_strength(password: &str) -> Result<()> {
         if password.len() < 8 {
@@ -191,7 +207,9 @@ impl PasswordUtils {
         let has_lowercase = password.chars().any(|c| c.is_lowercase());
         let has_uppercase = password.chars().any(|c| c.is_uppercase());
         let has_digit = password.chars().any(|c| c.is_ascii_digit());
-        let has_symbol = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
+        let has_symbol = password
+            .chars()
+            .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
 
         if !has_lowercase {
             return Err(anyhow::anyhow!("密码必须包含小写字母"));
@@ -232,7 +250,10 @@ impl StudentValidator {
         }
 
         // 编号只能包含字母、数字、下划线和连字符
-        if !student_id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        if !student_id
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
             return Err(anyhow::anyhow!("编号只能包含字母、数字、下划线和连字符"));
         }
 
@@ -360,28 +381,34 @@ mod tests {
         ];
 
         for id in valid_ids {
-            assert!(StudentValidator::validate_student_id_format(id).is_ok(),
-                   "应该接受有效编号: {}", id);
+            assert!(
+                StudentValidator::validate_student_id_format(id).is_ok(),
+                "应该接受有效编号: {}",
+                id
+            );
         }
 
         // 测试无效的编号格式
         let long_string = "a".repeat(51);
         let invalid_ids = vec![
-            "",              // 空字符串
-            "_invalid",      // 下划线开头
-            "invalid_",      // 下划线结尾
-            "-invalid",      // 连字符开头
-            "invalid-",      // 连字符结尾
-            "user@domain",   // 包含特殊字符
-            "user space",    // 包含空格
-            "user#123",      // 包含井号
-            "user.123",      // 包含点号
-            &long_string,    // 超长
+            "",            // 空字符串
+            "_invalid",    // 下划线开头
+            "invalid_",    // 下划线结尾
+            "-invalid",    // 连字符开头
+            "invalid-",    // 连字符结尾
+            "user@domain", // 包含特殊字符
+            "user space",  // 包含空格
+            "user#123",    // 包含井号
+            "user.123",    // 包含点号
+            &long_string,  // 超长
         ];
 
         for id in invalid_ids {
-            assert!(StudentValidator::validate_student_id_format(id).is_err(),
-                   "应该拒绝无效编号: {}", id);
+            assert!(
+                StudentValidator::validate_student_id_format(id).is_err(),
+                "应该拒绝无效编号: {}",
+                id
+            );
         }
     }
 }

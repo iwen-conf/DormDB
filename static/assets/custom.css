@@ -1,0 +1,90 @@
+:root {
+  --db-primary: #2563eb;
+  --db-primary-hover: #1d4ed8;
+  --db-accent: #0ea5e9;
+  --db-bg: linear-gradient(135deg, #f8fafc 0%, #eef6ff 50%, #f0f9ff 100%);
+  --db-card-bg: rgba(255, 255, 255, 0.95);
+  --db-border: rgba(37, 99, 235, 0.14);
+  --db-shadow: 0 18px 45px rgba(37, 99, 235, 0.16);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--db-bg);
+  color: #0f172a;
+}
+
+.card {
+  background: var(--db-card-bg);
+  border: 1px solid var(--db-border);
+  border-radius: 18px;
+  box-shadow: var(--db-shadow);
+  backdrop-filter: blur(3px);
+}
+
+.btn {
+  border-radius: 12px;
+  font-weight: 600;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--db-primary), var(--db-accent));
+  border: none;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--db-primary-hover), var(--db-primary));
+}
+
+.btn-secondary {
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  background: #fff;
+}
+
+.form-input {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-input:focus {
+  border-color: var(--db-primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.bg-white.shadow {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.max-w-md,
+.max-w-2xl,
+.max-w-7xl {
+  animation: fadeInUp 0.35s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

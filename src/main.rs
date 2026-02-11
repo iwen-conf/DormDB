@@ -79,7 +79,7 @@ async fn main() -> std::io::Result<()> {
             // 生产环境：仅允许特定域名
             let allowed_origins = env::var("ALLOWED_ORIGINS")
                 .unwrap_or_else(|_| "https://your-domain.com".to_string());
-            
+
             let mut cors = Cors::default()
                 .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
                 .allowed_headers(vec![
@@ -89,12 +89,12 @@ async fn main() -> std::io::Result<()> {
                 ])
                 .supports_credentials()
                 .max_age(3600);
-            
+
             // 添加允许的源
             for origin in allowed_origins.split(',') {
                 cors = cors.allowed_origin(origin.trim());
             }
-            
+
             cors
         };
 

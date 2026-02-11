@@ -1,18 +1,19 @@
 use crate::models::{
-    AdminDeleteRequest, AdminLoginRequest, ApiResponse, Applicant, ApplicationStats, ApplyRequest,
-    DatabaseCredentials, PublicApplicationRecord, SystemStatus, StudentId, StudentIdBatchImport,
-    StudentIdStats, PaginationQuery, AddStudentIdRequest, UpdateStudentIdRequest, BatchImportResult,
-    UserDatabaseInfo, DeleteUserRequest,
+    AddStudentIdRequest, AdminDeleteRequest, AdminLoginRequest, ApiResponse, Applicant,
+    ApplicationStats, ApplyRequest, BatchImportResult, DatabaseCredentials, DeleteUserRequest,
+    PaginationQuery, PublicApplicationRecord, StudentId, StudentIdBatchImport, StudentIdStats,
+    SystemStatus, UpdateStudentIdRequest, UserDatabaseInfo,
 };
 use crate::services::DatabaseService;
 use actix_web::{HttpResponse, Result, web};
+use actix_web_httpauth::middleware::HttpAuthentication;
 use log::{info, warn};
 use utoipa::OpenApi;
 
 /// 申请数据库
 ///
 /// 为用户申请一个新的MySQL数据库实例，包括创建数据库、用户和授权。
-/// 
+///
 /// # 安全特性
 /// - 灵活的用户编号格式验证
 /// - 用户编号白名单验证
@@ -25,16 +26,16 @@ use utoipa::OpenApi;
 /// 3. 创建MySQL数据库和用户
 /// 4. 授予最小必要权限
 /// 5. 记录申请信息到SQLite
-/// 
+///
 /// # 权限说明
 /// 用户获得的权限仅限于：
 /// - SELECT, INSERT, UPDATE, DELETE (数据操作)
 /// - INDEX, LOCK TABLES (索引和锁定)
-/// 
+///
 /// 禁止权限：
 /// - CREATE, DROP, ALTER (结构修改)
 /// - GRANT, SUPER (权限管理)
-/// 
+///
 /// # 错误处理
 /// - 40001: 用户编号格式无效
 /// - 40901: 用户编号已申请过数据库
@@ -407,33 +408,33 @@ pub async fn check_and_repair_consistency(
 /// 管理员登录验证
 ///
 /// 验证管理员密码并返回JWT访问令牌。
-/// 
+///
 /// # 安全特性
 /// - 密码强度验证（至少8位，包含大小写字母、数字、特殊字符）
 /// - bcrypt哈希验证
 /// - JWT令牌生成（24小时有效期）
 /// - 会话管理和追踪
-/// 
+///
 /// # 认证流程
 /// 1. 验证密码格式和强度
 /// 2. 使用bcrypt验证密码哈希
 /// 3. 生成JWT令牌（包含用户信息和权限）
 /// 4. 返回令牌用于后续API调用
-/// 
+///
 /// # 使用方法
 /// 1. 调用此接口获取JWT令牌
 /// 2. 在后续管理员API请求中包含令牌：
-///    ```
+///    ```text
 ///    Authorization: Bearer YOUR_JWT_TOKEN
 ///    ```
-/// 
+///
 /// # 密码要求
 /// - 最少8位字符
 /// - 包含大写字母 (A-Z)
 /// - 包含小写字母 (a-z)
 /// - 包含数字 (0-9)
 /// - 包含特殊字符 (!@#$%^&*)
-/// 
+///
 /// # 错误处理
 /// - 40101: 密码错误
 /// - 40102: 密码强度不足
@@ -489,7 +490,10 @@ pub async fn admin_login(
 
     let http_status = match response.code {
         0 => 200,
-        _ => 401,
+        40101 => 401,
+        40102 => 400,
+        50003 | 50004 => 500,
+        _ => 500,
     };
 
     Ok(
@@ -646,7 +650,7 @@ pub async fn get_public_applications(service: web::Data<DatabaseService>) -> Res
 /// 获取用户编号列表
 ///
 /// 获取系统中所有用户编号记录，支持分页查询。
-/// 
+///
 /// # 功能说明
 /// - 支持分页查询，避免大量数据传输
 /// - 显示用户编号的申请状态
@@ -666,7 +670,7 @@ pub async fn get_public_applications(service: web::Data<DatabaseService>) -> Res
 /// - `applied_db_name`: 申请的数据库名（如果已申请）
 /// - `created_at`: 创建时间
 /// - `updated_at`: 更新时间
-/// 
+///
 /// # 权限要求
 /// 需要管理员JWT令牌
 #[utoipa::path(
@@ -790,7 +794,13 @@ pub async fn api_add_student_id(
 ) -> Result<HttpResponse> {
     info!("管理员添加学号: {}", req.student_id);
 
-    let response = data.add_student_id(&req.student_id, req.student_name.as_deref(), req.class_info.as_deref()).await;
+    let response = data
+        .add_student_id(
+            &req.student_id,
+            req.student_name.as_deref(),
+            req.class_info.as_deref(),
+        )
+        .await;
     let http_status = if response.code == 0 { 200 } else { 400 };
 
     Ok(
@@ -863,7 +873,9 @@ pub async fn api_batch_import_student_ids(
 ) -> Result<HttpResponse> {
     info!("管理员批量导入学号");
 
-    let response = data.batch_import_student_ids(&req.student_data, req.overwrite_existing).await;
+    let response = data
+        .batch_import_student_ids(&req.student_data, req.overwrite_existing)
+        .await;
     let http_status = if response.code == 0 { 200 } else { 400 };
 
     Ok(
@@ -929,7 +941,9 @@ pub async fn api_update_student_id(
     let id = path.into_inner();
     info!("管理员更新学号信息: ID {}", id);
 
-    let response = data.update_student_id(id, req.student_name.as_deref(), req.class_info.as_deref()).await;
+    let response = data
+        .update_student_id(id, req.student_name.as_deref(), req.class_info.as_deref())
+        .await;
     let http_status = if response.code == 0 { 200 } else { 400 };
 
     Ok(
@@ -1040,9 +1054,7 @@ pub async fn api_delete_student_id(
         ("Bearer" = [])
     )
 )]
-pub async fn api_get_student_id_stats(
-    data: web::Data<DatabaseService>,
-) -> Result<HttpResponse> {
+pub async fn api_get_student_id_stats(data: web::Data<DatabaseService>) -> Result<HttpResponse> {
     info!("管理员请求学号统计");
 
     let response = data.get_student_id_stats().await;
@@ -1057,22 +1069,22 @@ pub async fn api_get_student_id_stats(
 /// DormDB API 文档
 ///
 /// 数据库自助申请平台API接口文档
-/// 
+///
 /// # 认证说明
 /// 管理员接口需要JWT Bearer Token认证：
-/// ```
+/// ```text
 /// Authorization: Bearer YOUR_JWT_TOKEN
 /// ```
-/// 
+///
 /// # 获取令牌
 /// 调用 `/api/v1/admin/login` 接口获取JWT令牌
-/// 
+///
 /// # 安全特性
 /// - JWT令牌有效期24小时
 /// - 密码采用bcrypt哈希存储
 /// - 严格的输入验证和SQL注入防护
 /// - 用户编号白名单验证机制
-/// 
+///
 /// # 版本信息
 /// - 版本: 1.0.0
 /// - 协议: MIT License
@@ -1166,31 +1178,47 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/v1")
             .route("/apply", web::post().to(apply_database))
-            .route("/applicants", web::get().to(get_applicants))
             .route("/health", web::get().to(health_check))
-            // 管理员接口
-            .route("/admin/status", web::get().to(get_system_status))
-            .route("/admin/stats", web::get().to(get_application_stats))
-            .route(
-                "/admin/repair",
-                web::post().to(check_and_repair_consistency),
-            )
             .route("/admin/login", web::post().to(admin_login))
-            .route("/admin/delete", web::post().to(admin_delete_user))
-            // 用户编号管理接口
-            .route("/admin/student-ids", web::get().to(api_get_student_ids))
-            .route("/admin/student-ids", web::post().to(api_add_student_id))
-            .route("/admin/student-ids/batch-import", web::post().to(api_batch_import_student_ids))
-            .route("/admin/student-ids/{id}", web::put().to(api_update_student_id))
-            .route("/admin/student-ids/{id}", web::delete().to(api_delete_student_id))
-            .route("/admin/student-ids/stats", web::get().to(api_get_student_id_stats))
-            // 用户管理接口
-            .route("/admin/users", web::get().to(api_get_all_users))
-            .route("/admin/users/{identity_key}", web::delete().to(api_delete_user_by_identity))
             // 公开接口
             .route(
                 "/public/applications",
                 web::get().to(get_public_applications),
+            )
+            // 需要管理员权限的接口
+            .service(
+                web::resource("/applicants")
+                    .wrap(HttpAuthentication::bearer(
+                        crate::auth::admin_auth_middleware,
+                    ))
+                    .route(web::get().to(get_applicants)),
+            )
+            .service(
+                web::scope("/admin")
+                    .wrap(HttpAuthentication::bearer(
+                        crate::auth::admin_auth_middleware,
+                    ))
+                    .route("/status", web::get().to(get_system_status))
+                    .route("/stats", web::get().to(get_application_stats))
+                    .route("/repair", web::post().to(check_and_repair_consistency))
+                    .route("/delete", web::post().to(admin_delete_user))
+                    .route("/student-ids", web::get().to(api_get_student_ids))
+                    .route("/student-ids", web::post().to(api_add_student_id))
+                    .route(
+                        "/student-ids/batch-import",
+                        web::post().to(api_batch_import_student_ids),
+                    )
+                    .route("/student-ids/{id}", web::put().to(api_update_student_id))
+                    .route("/student-ids/{id}", web::delete().to(api_delete_student_id))
+                    .route(
+                        "/student-ids/stats",
+                        web::get().to(api_get_student_id_stats),
+                    )
+                    .route("/users", web::get().to(api_get_all_users))
+                    .route(
+                        "/users/{identity_key}",
+                        web::delete().to(api_delete_user_by_identity),
+                    ),
             ),
     );
 }
@@ -1244,9 +1272,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         ("Bearer" = [])
     )
 )]
-pub async fn api_get_all_users(
-    data: web::Data<DatabaseService>,
-) -> Result<HttpResponse> {
+pub async fn api_get_all_users(data: web::Data<DatabaseService>) -> Result<HttpResponse> {
     info!("管理员请求用户列表");
 
     let response = data.get_all_users().await;
@@ -1322,7 +1348,9 @@ pub async fn api_delete_user_by_identity(
     let identity_key = path.into_inner();
     info!("管理员删除用户: {}", identity_key);
 
-    let response = data.delete_user_by_identity(&identity_key, &req.reason).await;
+    let response = data
+        .delete_user_by_identity(&identity_key, &req.reason)
+        .await;
     let http_status = if response.code == 0 { 200 } else { 400 };
 
     Ok(

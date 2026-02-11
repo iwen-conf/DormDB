@@ -111,7 +111,10 @@ impl AppConfig {
             let is_dev_mode = env::var("DEV_MODE").unwrap_or_default() == "true";
 
             if host == "%" && !is_dev_mode {
-                return Err(anyhow!("安全错误: MYSQL_ALLOWED_HOST 不能设置为通配符 '%'，除非设置 DEV_MODE=true").into());
+                return Err(anyhow!(
+                    "安全错误: MYSQL_ALLOWED_HOST 不能设置为通配符 '%'，除非设置 DEV_MODE=true"
+                )
+                .into());
             }
 
             if host == "%" && is_dev_mode {
@@ -202,7 +205,10 @@ impl AppConfig {
             let is_dev_mode = std::env::var("DEV_MODE").unwrap_or_default() == "true";
 
             if allowed_host == "%" && !is_dev_mode {
-                return Err(anyhow!("安全错误: 生产环境不允许使用通配符主机 '%'，请设置 DEV_MODE=true 或使用具体IP").into());
+                return Err(anyhow!(
+                    "安全错误: 生产环境不允许使用通配符主机 '%'，请设置 DEV_MODE=true 或使用具体IP"
+                )
+                .into());
             }
 
             if allowed_host.is_empty() {

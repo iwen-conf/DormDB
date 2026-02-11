@@ -1,19 +1,70 @@
-use actix_files::NamedFile;
-use actix_web::{web, Result, HttpRequest};
-use std::path::PathBuf;
 use log::{info, warn};
+use std::path::PathBuf;
+
+use actix_files::NamedFile;
+use actix_web::{HttpRequest, Result, web};
+
+const ROOT_PAYLOAD_PATH: &str = "static/_payload.json";
+
+fn route_payload_path(req: &HttpRequest) -> PathBuf {
+    let request_path = req.path();
+
+    if request_path.starts_with("/admin/") {
+        let candidate = PathBuf::from("static")
+            .join(request_path.trim_start_matches('/'))
+            .join("_payload.json");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    if request_path.starts_with("/user/") {
+        let candidate = PathBuf::from("static")
+            .join(request_path.trim_start_matches('/'))
+            .join("_payload.json");
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    PathBuf::from(ROOT_PAYLOAD_PATH)
+}
 
 /// Payload 文件处理器
 /// 返回 Nuxt 的 payload JSON 文件，支持查询参数
-pub async fn payload_handler() -> Result<NamedFile> {
-    info!("返回 payload 文件");
-    Ok(NamedFile::open("static/_payload.json")?)
+pub async fn payload_handler(req: HttpRequest) -> Result<NamedFile> {
+    let payload_path = route_payload_path(&req);
+    let debug_enabled = std::env::var("DEBUG_UI_UX_FIX")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if debug_enabled {
+        info!(
+            "DEBUG: payload_handler path={} resolved={} query={}",
+            req.path(),
+            payload_path.display(),
+            req.query_string()
+        );
+    } else {
+        info!("返回 payload 文件: {}", payload_path.display());
+    }
+
+    Ok(NamedFile::open(payload_path)?)
 }
 
 /// SPA 回退处理器
 /// 处理前端路由，如果文件不存在则回退到 200.html
 pub async fn spa_handler(req: HttpRequest) -> Result<NamedFile> {
-    let path: PathBuf = req.match_info().query("filename").parse().unwrap_or_default();
+    let path: PathBuf = req
+        .match_info()
+        .query("filename")
+        .parse()
+        .unwrap_or_default();
+    if req.path().contains("_payload.json") {
+        let payload_path = route_payload_path(&req);
+        return Ok(NamedFile::open(payload_path)?);
+    }
+
     let file_path = PathBuf::from("static").join(&path);
 
     info!("SPA处理器 - 请求路径: {:?}", file_path);
@@ -49,7 +100,7 @@ pub async fn index_handler() -> Result<NamedFile> {
 pub async fn admin_handler(path: web::Path<String>) -> Result<NamedFile> {
     let admin_path = path.as_str();
     info!("访问管理员页面: {}", admin_path);
-    
+
     // 构建文件路径
     let file_path = match admin_path {
         "" | "/" => PathBuf::from("static/admin/login/index.html"), // 默认到登录页
@@ -96,29 +147,62 @@ pub fn configure_static_routes(cfg: &mut web::ServiceConfig) {
                 .show_files_listing()
                 // 开发环境禁用缓存，避免前端重新生成时的缓存问题
                 .use_etag(false)
-                .use_last_modified(false)
+                .use_last_modified(false),
         )
         .service(
             actix_files::Files::new("/favicon.ico", "static/favicon.ico")
                 .use_etag(false)
-                .use_last_modified(false)
+                .use_last_modified(false),
         )
         .service(
             actix_files::Files::new("/robots.txt", "static/robots.txt")
                 .use_etag(false)
-                .use_last_modified(false)
+                .use_last_modified(false),
         )
         // payload 文件处理 (支持查询参数)
         .route("/_payload.json", web::get().to(payload_handler))
         .route("/admin/login/_payload.json", web::get().to(payload_handler))
-        .route("/admin/dashboard/_payload.json", web::get().to(payload_handler))
-        .route("/admin/students/_payload.json", web::get().to(payload_handler))
+        .route(
+            "/admin/dashboard/_payload.json",
+            web::get().to(payload_handler),
+        )
+        .route(
+            "/admin/students/_payload.json",
+            web::get().to(payload_handler),
+        )
+        .route(
+            "/user/profile/_payload.json",
+            web::get().to(payload_handler),
+        )
+        // 统一的前端视觉增强样式
+        .service(
+            actix_files::Files::new("/assets", "static/assets")
+                .use_etag(false)
+                .use_last_modified(false),
+        )
         // 管理员页面路由 (具体路径优先)
-        .route("/admin", web::get().to(|| async { admin_handler(web::Path::from("".to_string())).await }))
-        .route("/admin/", web::get().to(|| async { admin_handler(web::Path::from("".to_string())).await }))
-        .route("/admin/login", web::get().to(|| async { admin_handler(web::Path::from("login".to_string())).await }))
-        .route("/admin/dashboard", web::get().to(|| async { admin_handler(web::Path::from("dashboard".to_string())).await }))
-        .route("/admin/students", web::get().to(|| async { admin_handler(web::Path::from("students".to_string())).await }))
+        .route(
+            "/admin",
+            web::get().to(|| async { admin_handler(web::Path::from("".to_string())).await }),
+        )
+        .route(
+            "/admin/",
+            web::get().to(|| async { admin_handler(web::Path::from("".to_string())).await }),
+        )
+        .route(
+            "/admin/login",
+            web::get().to(|| async { admin_handler(web::Path::from("login".to_string())).await }),
+        )
+        .route(
+            "/admin/dashboard",
+            web::get()
+                .to(|| async { admin_handler(web::Path::from("dashboard".to_string())).await }),
+        )
+        .route(
+            "/admin/students",
+            web::get()
+                .to(|| async { admin_handler(web::Path::from("students".to_string())).await }),
+        )
         // 通配符路由 (放在最后)
         .route("/admin/{path:.*}", web::get().to(admin_handler))
         // SPA 回退处理 (放在最后，捕获所有其他路径)
